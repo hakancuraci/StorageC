@@ -7,9 +7,12 @@ on:
     tags:
       - "v*"
   pull_request:
+  schedule:
+    - cron: "0 1 * * *"
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -33,6 +36,7 @@ jobs:
           if-no-files-found: error
 
   win-x64:
+    if: github.event_name != 'schedule'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
@@ -71,8 +75,122 @@ jobs:
           path: artifacts/win-x64/
           if-no-files-found: error
 
+  smb-performance:
+    needs: linux-x64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      samba:
+        image: dockurr/samba@sha256:2a0452a12b7a244a22f18d0f233101bb8d4952b5500ae263905e3b9dad3bf2ae
+        env:
+          NAME: bench
+          USER: bench
+          PASS: benchpass
+        ports:
+          - 445/tcp
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v7
+        with:
+          name: storagec-linux-x64
+          path: artifacts/linux-x64
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - name: Wait for Samba
+        shell: bash
+        env:
+          SMB_PORT: ${{ job.services.samba.ports['445'] }}
+        run: |
+          for attempt in {1..30}; do
+            if timeout 1 bash -c "</dev/tcp/127.0.0.1/$SMB_PORT" 2>/dev/null; then
+              exit 0
+            fi
+            echo "Waiting for Samba ($attempt/30)..."
+            sleep 1
+          done
+          echo "Samba did not become ready on port $SMB_PORT." >&2
+      - name: Download previous main performance baseline
+        id: baseline
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          artifact_id="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/artifacts?name=StorageC-smb-performance-main&per_page=10" \
+            --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[0].id // empty' \
+            2>/dev/null || true)"
+          if [[ -z "$artifact_id" ]]; then
+            echo "No previous main performance artifact is available."
+            exit 0
+          fi
+          mkdir -p artifacts/performance-baseline
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > /tmp/storagec-performance.zip
+          unzip -q /tmp/storagec-performance.zip -d artifacts/performance-baseline
+          baseline="$(find artifacts/performance-baseline -name result.json -type f -print -quit)"
+          if [[ -n "$baseline" ]]; then
+            echo "path=$baseline" >> "$GITHUB_OUTPUT"
+            echo "Using baseline $baseline from artifact $artifact_id."
+          fi
+      - name: Determine previous release
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: previous-release
+        shell: bash
+        run: |
+          previous_tag="$(git tag --list 'v*' --sort=-v:refname | grep -Fvx "$GITHUB_REF_NAME" | head -n 1)"
+          if [[ -z "$previous_tag" ]]; then
+            echo "No previous release tag is available."
+            exit 0
+          fi
+          echo "version=${previous_tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Previous release: $previous_tag"
+      - name: Benchmark previous release on the current runner
+        if: startsWith(github.ref, 'refs/tags/v') && steps.previous-release.outputs.version != ''
+        id: release-baseline
+        env:
+          SMB_HOST: 127.0.0.1
+          SMB_PORT: ${{ job.services.samba.ports['445'] }}
+          SMB_SHARE: bench
+          SMB_USER: bench
+          SMB_PASSWORD: benchpass
+          STORAGEC_PERF_DURATION_SECONDS: "180"
+          STORAGEC_PERF_ENFORCE: "false"
+          STORAGEC_PERF_OUTPUT: artifacts/performance-release-baseline
+        shell: bash
+        run: |
+          dotnet run --project tests/StorageC.LoadTests.Baseline -c Release \
+            -p:StorageCBaselineVersion=${{ steps.previous-release.outputs.version }}
+          echo "path=artifacts/performance-release-baseline/result.json" >> "$GITHUB_OUTPUT"
+      - name: Run SMB performance test
+        env:
+          SMB_HOST: 127.0.0.1
+          SMB_PORT: ${{ job.services.samba.ports['445'] }}
+          SMB_SHARE: bench
+          SMB_USER: bench
+          SMB_PASSWORD: benchpass
+          STORAGEC_PERF_DURATION_SECONDS: ${{ github.event_name == 'schedule' && '900' || startsWith(github.ref, 'refs/tags/v') && '180' || '45' }}
+          STORAGEC_PERF_BASELINE: ${{ steps.release-baseline.outputs.path || steps.baseline.outputs.path }}
+          STORAGEC_PERF_ENFORCE: ${{ startsWith(github.ref, 'refs/tags/v') && 'true' || 'false' }}
+          STORAGEC_PERF_OUTPUT: artifacts/performance
+        run: dotnet run --project tests/StorageC.LoadTests -c Release
+      - name: Add performance report to job summary
+        if: always() && hashFiles('artifacts/performance/report.md') != ''
+        shell: bash
+        run: cat artifacts/performance/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload performance report
+        if: always() && hashFiles('artifacts/performance/**') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ github.ref == 'refs/heads/main' && 'StorageC-smb-performance-main' || format('StorageC-smb-performance-{0}', github.run_id) }}
+          path: artifacts/performance/
+          if-no-files-found: error
+          retention-days: 90
+
   dotnet-package:
-    needs: [linux-x64, win-x64]
+    needs: [linux-x64, win-x64, smb-performance]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7

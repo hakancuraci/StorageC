@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageC", "src\StorageC\St
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageC.Tests", "tests\StorageC.Tests\StorageC.Tests.csproj", "{B49FAD9C-79E7-475D-96BD-64ADCFBFF427}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StorageC.LoadTests", "tests\StorageC.LoadTests\StorageC.LoadTests.csproj", "{8CFFDF85-C0D6-4489-AB3F-A5D6BCE7EB50}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{B49FAD9C-79E7-475D-96BD-64ADCFBFF427}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B49FAD9C-79E7-475D-96BD-64ADCFBFF427}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B49FAD9C-79E7-475D-96BD-64ADCFBFF427}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8CFFDF85-C0D6-4489-AB3F-A5D6BCE7EB50}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8CFFDF85-C0D6-4489-AB3F-A5D6BCE7EB50}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8CFFDF85-C0D6-4489-AB3F-A5D6BCE7EB50}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8CFFDF85-C0D6-4489-AB3F-A5D6BCE7EB50}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

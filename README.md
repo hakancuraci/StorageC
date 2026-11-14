@@ -91,6 +91,21 @@ Linux için `linux-x64` kullanın. Native build, upstream `libsmb2` commit'ini
 CMake `FetchContent` ile sabit revizyondan alır. Desteklenen paket hedefleri şu
 anda Windows x64 ve Linux x64'tür.
 
+## Sürekli SMB performans testleri
+
+CI, sabit digest'li geçici bir Samba container'ına karşı gerçek SMB okuma/yazma
+ve veri doğrulama senaryoları çalıştırır:
+
+- Her push ve pull request'te 45 saniyelik report-only test çalışır.
+- Her gece 01:00 UTC'de 15 dakikalık report-only soak testi çalışır.
+- `v*` release tag'inde son yayımlanmış NuGet sürümü ve mevcut kod aynı runner'da
+  üçer dakika ölçülür. SMB hatası, veri bozulması, en az `%25` throughput kaybı
+  veya en az `%50` p95 gecikme artışı paket yayınını durdurur.
+
+Job özetinde throughput, ops/s, p95 gecikme, hata sayısı, peak working set ve
+önceki sonuca göre değişim gösterilir. Ham JSON ve Markdown raporları
+`StorageC-smb-performance-*` Actions artifact'ında 90 gün tutulur.
+
 ## Üretime çıkmadan önce
 
 1. Windows ve Linux native CI build'lerini çalıştırın.
