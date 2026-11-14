@@ -1,0 +1,152 @@
+name: Build native libraries and .NET package
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - name: Run managed and fixture tests
+        shell: pwsh
+        run: ./tests/run-tests.ps1
+      - name: Build Linux native libraries
+        shell: pwsh
+        run: ./build-native.ps1 -RuntimeIdentifier linux-x64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: storagec-linux-x64
+          path: artifacts/linux-x64/
+          if-no-files-found: error
+
+  win-x64:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - name: Install MSYS2 UCRT64 GCC
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc
+      - name: Configure GCC for fixture tests
+        shell: pwsh
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          $gccDirectory = Join-Path $env:MSYS2_LOCATION 'ucrt64\bin'
+          $compiler = Join-Path $gccDirectory 'gcc.exe'
+          if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+            throw "MSYS2 setup completed but GCC is missing: $compiler"
+          }
+          $gccDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $compiler --version
+          if ($LASTEXITCODE -ne 0) { throw 'GCC could not be executed.' }
+      - name: Run managed and fixture tests
+        shell: pwsh
+        run: ./tests/run-tests.ps1
+      - name: Build Windows native libraries
+        shell: pwsh
+        run: ./build-native.ps1 -RuntimeIdentifier win-x64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: storagec-win-x64
+          path: artifacts/win-x64/
+          if-no-files-found: error
+
+  dotnet-package:
+    needs: [linux-x64, win-x64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: storagec-linux-x64
+          path: artifacts/linux-x64
+      - uses: actions/download-artifact@v7
+        with:
+          name: storagec-win-x64
+          path: artifacts/win-x64
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - name: Validate tag and determine package version
+        if: startsWith(github.ref, 'refs/tags/')
+        id: package-version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Tag must use a NuGet-compatible version such as v1.2.3 or v1.2.3-beta.1." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build wrapper
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: dotnet build StorageC.sln -c Release -p:ContinuousIntegrationBuild=true
+      - name: Build tagged wrapper
+        if: startsWith(github.ref, 'refs/tags/')
+        run: >-
+          dotnet build StorageC.sln -c Release
+          -p:ContinuousIntegrationBuild=true
+          -p:Version=${{ steps.package-version.outputs.version }}
+          -p:PackageVersion=${{ steps.package-version.outputs.version }}
+      - name: Pack wrapper and native runtimes
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: dotnet pack src/StorageC/StorageC.csproj -c Release --no-build -o artifacts/packages
+      - name: Pack tagged release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: >-
+          dotnet pack src/StorageC/StorageC.csproj
+          -c Release --no-build -o artifacts/packages
+          -p:Version=${{ steps.package-version.outputs.version }}
+          -p:PackageVersion=${{ steps.package-version.outputs.version }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: StorageC-dotnet-package
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
+
+  nuget-publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: dotnet-package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: StorageC-dotnet-package
+          path: artifacts/packages
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - name: Authenticate to NuGet.org with trusted publishing
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          user: hakancuraci
+      - name: Publish package to NuGet.org
+        run: >-
+          dotnet nuget push "artifacts/packages/*.nupkg"
+          --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <AssemblyName>StorageC</AssemblyName>
+    <RootNamespace>StorageC</RootNamespace>
+    <PackageId>StorageC</PackageId>
+    <Version>0.1.0</Version>
+    <PackageVersion>0.1.0</PackageVersion>
+    <Description>High-performance .NET SMB2/3 client backed by libsmb2.</Description>
+    <Authors>StorageC</Authors>
+    <Copyright>Copyright (c) 2026 hakancuraci</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/hakancuraci/StorageC</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/hakancuraci/StorageC</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../artifacts/win-x64/storagec_native.dll" Pack="true" PackagePath="runtimes/win-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/win-x64/storagec_native.dll')" />
+    <None Include="../../artifacts/win-x64/smb2.dll" Pack="true" PackagePath="runtimes/win-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/win-x64/smb2.dll')" />
+    <None Include="../../artifacts/win-x64/libsmb2.dll" Pack="true" PackagePath="runtimes/win-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/win-x64/libsmb2.dll')" />
+    <None Include="../../artifacts/linux-x64/libstoragec_native.so" Pack="true" PackagePath="runtimes/linux-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/linux-x64/libstoragec_native.so')" />
+    <None Include="../../artifacts/linux-x64/libsmb2.so*" Pack="true" PackagePath="runtimes/linux-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/linux-x64/libsmb2.so')" />
+    <None Include="../../THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

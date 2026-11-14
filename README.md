@@ -1,0 +1,105 @@
+# StorageC
+
+Referans kütüphaneyle aynı temel C# kullanım modelini koruyan, arka planda C
+tabanlı [libsmb2](https://github.com/sahlberg/libsmb2) kullanan .NET 8 SMB2/3
+istemcisidir. Ürünün, assembly'nin, namespace'in ve NuGet paketinin adı
+`StorageC`'dir. Bu repo çalışır bir başlangıç uygulamasıdır; NuGet yayını öncesinde
+gerçek NAS modeliniz, ağınız ve yük profilinizle entegrasyon/soak testi gerekir.
+
+## Tasarım
+
+- C# yalnız sabit ve küçük bir C ABI shim'i çağırır; `libsmb2` struct düzenleri
+  managed ABI'ye sızmaz.
+- Native client/file pointer'ları `SafeHandle` ile yönetilir. Açık stream,
+  client dispose edilse bile native client referansını yaşatır.
+- Her `libsmb2_context` tek özel worker thread üzerinde kullanılır. Context aynı
+  anda iki thread'den çağrılmaz; async çağrılar .NET ThreadPool thread'i tutmaz.
+- İç transfer buffer'ları `ArrayPool<byte>` ile yeniden kullanılır. `ReadAsync`
+  ve `WriteAsync` buffer'ı yalnız native çağrı sırasında pinler.
+- `libsmb2` sunucunun bildirdiği maksimum read/write boyutunu shim içinde uygular;
+  kısmi write sonuçları tamamlanana kadar döngü devam eder.
+- Paralel dosya transferi `PooledSmbClient` içindeki bağımsız client/context'lerle
+  yapılır. Kuyruk ve client sayısı sınırlıdır.
+- `libsmb2` LGPL uyumluluğu ve değiştirilebilirliği için ayrı dinamik kütüphane
+  olarak paketlenir.
+
+Hiçbir native/managed yazılım için mutlak “bellek problemi olmaz” garantisi
+verilemez. Buradaki sahiplik modeli; double-free, use-after-free, açık stream
+varken client'ın erken bırakılması, sınırsız kuyruk ve her chunk'ta allocation
+gibi tipik riskleri tasarımla engeller. CI fixture'ı native handle sayaçlarını
+stres sonunda sıfır olarak doğrular. Üretimde ASan/Valgrind (Linux), uzun soak
+testi ve gerçek SMB sunucusu testi ayrıca yapılmalıdır.
+
+## Kullanım
+
+```csharp
+using StorageC;
+
+await using ISmbClient client = SmbClient.Create(new SmbClientOptions
+{
+    Server = "10.0.0.20",
+    ShareName = "documents",
+    Username = "app-user",
+    Password = configuration["Smb:Password"]!,
+    Domain = "ACME",
+    ChunkSizeBytes = 1024 * 1024,
+    MaxReadBytes = 64L * 1024 * 1024,
+    RequireSigning = true
+});
+
+await using (var local = new FileStream("archive.zip", FileMode.Open,
+    FileAccess.Read, FileShare.Read, 1024 * 1024, useAsync: true))
+{
+    await client.WriteAsync("incoming/archive.zip", local,
+        new SmbWriteOptions { Overwrite = true, ForceSync = true });
+}
+
+await using Stream remote = await client.OpenReadAsync("incoming/archive.zip");
+await remote.CopyToAsync(destination);
+```
+
+Yoğun API servisinde havuzu singleton kaydedin:
+
+```csharp
+builder.Services.AddSingleton<ISmbClient>(_ => PooledSmbClient.Create(
+    smbOptions,
+    new SmbClientPoolOptions
+    {
+        MaxClients = 8,
+        MaxPendingAcquires = 32,
+        AcquireTimeout = TimeSpan.FromSeconds(2)
+    }));
+```
+
+`OpenRead[Async]` / `OpenWrite[Async]` ile dönen stream mutlaka dispose
+edilmelidir; havuz client'ı stream kapanana kadar kirada tutar. Yazma atomik
+değildir: hata/iptal kısmi dosya bırakabilir. Atomik yayın için geçici dosya +
+rename iş akışı ayrıca eklenmelidir.
+
+## Build ve test
+
+Gereksinimler: .NET 8 SDK, CMake 3.21+, C derleyicisi ve Git.
+
+```powershell
+./build-native.ps1 -RuntimeIdentifier win-x64
+dotnet build StorageC.sln -c Release
+./tests/run-tests.ps1
+dotnet pack src/StorageC/StorageC.csproj -c Release
+```
+
+Linux için `linux-x64` kullanın. Native build, upstream `libsmb2` commit'ini
+CMake `FetchContent` ile sabit revizyondan alır. Desteklenen paket hedefleri şu
+anda Windows x64 ve Linux x64'tür.
+
+## Üretime çıkmadan önce
+
+1. Windows ve Linux native CI build'lerini çalıştırın.
+2. Gerçek NAS ile kimlik doğrulama, signing, encryption ve izin testleri yapın.
+3. Beklenen dosya boyutu/eşzamanlılıkla 12-24 saat soak testi çalıştırın.
+4. Linux native build'i ASan/UBSan ve Valgrind altında çalıştırın.
+5. Throughput/latency ölçümüne göre `ChunkSizeBytes` ve `MaxClients` ayarlayın;
+   daha büyük değerlerin her zaman daha hızlı olmadığını varsayın.
+
+Resmi libsmb2 API'si maksimum read/write boyutlarının sorgulanmasını ve context
+temizliğinde `smb2_destroy_context` kullanılmasını tanımlar. Bu shim bu kuralları
+uygular: [libsmb2 API header](https://github.com/sahlberg/libsmb2/blob/master/include/smb2/libsmb2.h).
