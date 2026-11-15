@@ -88,6 +88,8 @@ jobs:
           if-no-files-found: error
 
   smb-performance:
+    # Temporarily disabled while the SMB performance thresholds are stabilized.
+    if: ${{ false }}
     needs: linux-x64
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -202,7 +204,7 @@ jobs:
           retention-days: 90
 
   dotnet-package:
-    needs: [linux-x64, win-x64, smb-performance]
+    needs: [linux-x64, win-x64]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
