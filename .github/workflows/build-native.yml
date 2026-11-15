@@ -29,6 +29,17 @@ jobs:
       - name: Build Linux native libraries
         shell: pwsh
         run: ./build-native.ps1 -RuntimeIdentifier linux-x64
+      - name: Smoke test native libraries on Debian 12
+        shell: bash
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --env LD_LIBRARY_PATH=/src/artifacts/linux-x64 \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/src" \
+            --workdir /src \
+            mcr.microsoft.com/dotnet/sdk@sha256:1b955f179b02df4f0eb5fadedaa898cbe44d620a64aab52eec72c8e91d1355b5 \
+            dotnet run --project tests/StorageC.NativeSmokeTests -c Release
       - uses: actions/upload-artifact@v7
         with:
           name: storagec-linux-x64
@@ -236,6 +247,20 @@ jobs:
           -c Release --no-build -o artifacts/packages
           -p:Version=${{ steps.package-version.outputs.version }}
           -p:PackageVersion=${{ steps.package-version.outputs.version }}
+      - name: Smoke test NuGet package on Debian 12
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ steps.package-version.outputs.version || '0.1.0' }}
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/src" \
+            --workdir /src \
+            mcr.microsoft.com/dotnet/sdk@sha256:1b955f179b02df4f0eb5fadedaa898cbe44d620a64aab52eec72c8e91d1355b5 \
+            dotnet run --project tests/StorageC.NativeSmokeTests -c Release \
+              -p:StorageCPackageVersion="$PACKAGE_VERSION" \
+              -p:RestoreSources=/src/artifacts/packages
       - uses: actions/upload-artifact@v7
         with:
           name: StorageC-dotnet-package

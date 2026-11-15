@@ -23,7 +23,7 @@
     <None Include="../../artifacts/win-x64/smb2.dll" Pack="true" PackagePath="runtimes/win-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/win-x64/smb2.dll')" />
     <None Include="../../artifacts/win-x64/libsmb2.dll" Pack="true" PackagePath="runtimes/win-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/win-x64/libsmb2.dll')" />
     <None Include="../../artifacts/linux-x64/libstoragec_native.so" Pack="true" PackagePath="runtimes/linux-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/linux-x64/libstoragec_native.so')" />
-    <None Include="../../artifacts/linux-x64/libsmb2.so*" Pack="true" PackagePath="runtimes/linux-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/linux-x64/libsmb2.so')" />
+    <None Include="../../artifacts/linux-x64/libsmb2.so.7" Pack="true" PackagePath="runtimes/linux-x64/native/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../artifacts/linux-x64/libsmb2.so.7')" />
     <None Include="../../THIRD_PARTY_NOTICES.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

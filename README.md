@@ -78,7 +78,8 @@ rename iş akışı ayrıca eklenmelidir.
 
 ## Build ve test
 
-Gereksinimler: .NET 8 SDK, CMake 3.21+, C derleyicisi ve Git.
+Gereksinimler: .NET 8 SDK, CMake 3.21+, C derleyicisi, Git ve Linux native
+paketi için Docker.
 
 ```powershell
 ./build-native.ps1 -RuntimeIdentifier win-x64
@@ -87,9 +88,14 @@ dotnet build StorageC.sln -c Release
 dotnet pack src/StorageC/StorageC.csproj -c Release
 ```
 
-Linux için `linux-x64` kullanın. Native build, upstream `libsmb2` commit'ini
-CMake `FetchContent` ile sabit revizyondan alır. Desteklenen paket hedefleri şu
-anda Windows x64 ve Linux x64'tür.
+Linux için `linux-x64` kullanın. Bu hedef Docker içinde digest ile sabitlenmiş
+manylinux2014 imajında derlenir ve native dosyaların en fazla `GLIBC_2.17`
+istemesi build sırasında doğrulanır. Böylece native dosyalar Debian 12 dahil
+glibc 2.17+ sistemlerde yüklenebilir; çalıştırılan .NET sürümünün kendi işletim
+sistemi gereksinimleri ayrıca geçerlidir. Native build, upstream `libsmb2`
+commit'ini CMake `FetchContent` ile sabit revizyondan alır. Desteklenen paket
+hedefleri şu anda Windows x64 ve glibc tabanlı Linux x64'tür; Alpine/musl ayrı
+bir native hedef gerektirir.
 
 ## Sürekli SMB performans testleri
 
