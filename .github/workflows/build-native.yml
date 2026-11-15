@@ -35,6 +35,7 @@ jobs:
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp \
+            --env XDG_RUNTIME_DIR=/tmp \
             --env LD_LIBRARY_PATH=/src/artifacts/linux-x64 \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/src" \
             --workdir /src \
@@ -255,6 +256,7 @@ jobs:
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp \
+            --env XDG_RUNTIME_DIR=/tmp \
             --mount "type=bind,source=$GITHUB_WORKSPACE,target=/src" \
             --workdir /src \
             mcr.microsoft.com/dotnet/sdk@sha256:1b955f179b02df4f0eb5fadedaa898cbe44d620a64aab52eec72c8e91d1355b5 \
